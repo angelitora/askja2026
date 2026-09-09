@@ -31,6 +31,17 @@ jobs:
           DRIFTER_AUTH_USER: ${{ secrets.DRIFTER_AUTH_USER }}
           DRIFTER_AUTH_PASS: ${{ secrets.DRIFTER_AUTH_PASS }}
         run: python generate_report.py
+        
+      - name: Check generated files
+        run: |
+          echo "Current directory:"
+          pwd
+          echo "Contents:"
+          ls -la
+          echo "Docs:"
+          ls -la docs
+          echo "Docs/assets:"
+          ls -la docs/assets
 
       - name: Commit updated report
         run: |
