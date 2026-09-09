@@ -438,7 +438,7 @@ def add_tile_basemap(ax, domain, source="satellite", zoom=None,
 def plot_map(df, domain, contours=None, title="Drifter track",
              n_last=None, show_trajectory=True,
              vmin=4.5, vmax=6.0, cmap="plasma",
-             basemap="imo", zoom=None, land_color="0.85",
+             basemap="land", zoom=None, land_color="0.85",
              figsize=(9, 8),
              save=False, outfile="map.png", dpi=300):
     """
