@@ -3,8 +3,8 @@ generate_report.py
 ===================
 
 Builds a static HTML report (docs/index.html + docs/assets/*.png) with
-the latest ASKJA drifter temperature summary and plots. Meant to be run
-periodically (e.g. every 3 hours) by .github/workflows/update_report.yml,
+the latest ASKJA surface drifter temperature summary and plots. Meant to 
+be run periodically (e.g. every 3 hours) by .github/workflows/update_report.yml,
 but works the same run locally:
 
     python generate_report.py
@@ -125,7 +125,7 @@ def write_html(summary):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="1800">
-<title>ASKJA Drifter \u2014 Live Status</title>
+<title>Askja lake surface drifter \u2014 Live Status</title>
 <style>
   body {{ font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px;
           margin: 2rem auto; padding: 0 1rem; color: #222; }}
@@ -143,8 +143,9 @@ def write_html(summary):
 </style>
 </head>
 <body>
-  <h1>ASKJA Drifter \u2014 Live Status</h1>
+  <h1>Askja lake surface drifter \u2014 Live Status</h1>
   <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
+  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand</div> 
   {stale_banner}
   <div class="summary">{summary['text']}</div>
 
