@@ -145,6 +145,28 @@ def main():
         save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_extreme.png"),
     )
 
+    # Every individual feature above checked out — so either something
+    # breaks specifically when combined, or it's one of these two pieces
+    # that plot_map has but was never tested in isolation until now.
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG + trajectory line", show_trajectory=True,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_trajectory.png"),
+    )
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG + recent-position marker", show_recent_marker=True,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_recentmarker.png"),
+    )
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG everything combined",
+        color_by_sst=True, show_colorbar=True, vmin=SST_VMIN, vmax=SST_VMAX,
+        contours=contours, show_extreme=True, smooth_window=SMOOTH_WINDOW,
+        show_gridlabels=True, show_trajectory=True, show_recent_marker=True,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_all.png"),
+    )
+
     write_html(summary)
 
 

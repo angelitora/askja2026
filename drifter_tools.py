@@ -501,6 +501,7 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                      exclude_first_days=1, extreme_color="black",
                      extreme_marker="o", extreme_size=80,
                      show_gridlabels=False,
+                     show_trajectory=False, show_recent_marker=False,
                      figsize=(9, 8), save=False, outfile="map_simple.png",
                      dpi=300):
     """
@@ -514,9 +515,15 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                        colorbar (the manually-positioned version)
     contours        : pass a `load_contours()` result to draw them
     show_extreme    : mark "very high" SST locations
+    show_trajectory : draw the connecting track line + legend (present in
+                       plot_map, absent from the earlier debug images)
+    show_recent_marker : draw the open-circle "most recent position"
+                       marker (also present in plot_map, also untested
+                       in isolation until now)
 
-    Turn on exactly one at a time across separate calls to figure out
-    which one is responsible for a rendering problem.
+    Turn on exactly one at a time (or all at once) across separate calls
+    to figure out which one — or which combination — is responsible for
+    a rendering problem.
     """
     fig = plt.figure(figsize=figsize)
     ax = plt.axes(projection=WEB_MERCATOR_CRS)
@@ -530,6 +537,10 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
 
     lon = df["GPS-Longitude(deg)"].values
     lat = df["GPS-Latitude(deg)"].values
+
+    if show_trajectory:
+        ax.plot(lon, lat, color="gray", linewidth=0.5, zorder=2,
+                label="drifter track", transform=ccrs.PlateCarree())
 
     if color_by_sst:
         sst = df["sst_smooth"].values
@@ -554,6 +565,11 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
                        s=extreme_size, color=extreme_color, zorder=6,
                        transform=ccrs.PlateCarree())
 
+    if show_recent_marker:
+        ax.plot(lon[-1], lat[-1], marker="o", markersize=14,
+                markerfacecolor="none", markeredgecolor="black", zorder=5,
+                transform=ccrs.PlateCarree())
+
     if show_gridlabels:
         gl = ax.gridlines(draw_labels=True, linewidth=0.5)
         gl.top_labels = False
@@ -568,6 +584,8 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
         fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
 
     ax.set_title(title)
+    if show_trajectory:
+        ax.legend(loc="lower left", fontsize=8)
 
     if save:
         fig.savefig(outfile, dpi=dpi, bbox_inches="tight", facecolor="white")
