@@ -76,7 +76,6 @@ def main():
         df, domain, contours=contours,
         title=f"Drifter {PLATFORM_ID} \u2014 overview",
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo",
-        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
     )
 
@@ -88,7 +87,6 @@ def main():
         df, zoom_domain, contours=contours,
         title=f"Drifter {PLATFORM_ID} \u2014 zoom",
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(8, 6),
-        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
 
@@ -103,7 +101,6 @@ def main():
         title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
         n_last=n_last,
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(7, 6),
-        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
     )
 
