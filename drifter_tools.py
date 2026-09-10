@@ -31,7 +31,6 @@ from requests.auth import HTTPBasicAuth
 
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -566,11 +565,12 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     # ~42% as much ground distance as 1\u00b0 of latitude). Web Mercator is
     # locally shape-correct, which is why the IMO/cartopy tile examples
     # use it (`projection=IMO_basemap.crs`) instead of PlateCarree.
-    # NOTE: no constrained_layout here — it's documented as incompatible
-    # with mpl_toolkits.axes_grid1 (used below via make_axes_locatable to
-    # size the colorbar correctly). Mixing the two can badly misallocate
-    # figure space (colorbar balloons, map axes collapse to nothing).
-    # bbox_inches="tight" at save time handles final spacing instead.
+    # NOTE: no constrained_layout here — matplotlib's layout engines
+    # (constrained_layout, and axes_grid1-based colorbars we used to use
+    # here) both have known rough edges with cartopy GeoAxes, especially
+    # once a real raster tile image is drawn. The colorbar below is
+    # positioned manually instead, and bbox_inches="tight" at save time
+    # handles final spacing.
     fig = plt.figure(figsize=figsize)
     ax = plt.axes(projection=WEB_MERCATOR_CRS)
     # domain.extent is in lon/lat degrees, not Web Mercator metres, so
@@ -607,13 +607,23 @@ def plot_map(df, domain, contours=None, title="Drifter track",
             markerfacecolor="none", markeredgecolor="black", zorder=5,
             transform=ccrs.PlateCarree())
 
-    divider = make_axes_locatable(ax)
-    cax = divider.append_axes("right", size="4%", pad=0.3, axes_class=plt.Axes)
-    fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
-
     gl = ax.gridlines(draw_labels=True, linewidth=0.5)
     gl.top_labels = False
     gl.right_labels = False
+
+    # Colorbar sized to match the axes' ACTUAL rendered position, computed
+    # manually rather than via mpl_toolkits.axes_grid1.make_axes_locatable.
+    # axes_grid1 has documented compatibility problems with cartopy GeoAxes
+    # specifically — more likely to surface once a real raster tile image
+    # is drawn (vs. the simple vector scatter points this was tested with
+    # locally, since this sandbox can't reach real tile servers). This
+    # forces a draw first so ax.get_position() reflects the true final
+    # layout (including gridline label spacing), then places cax directly
+    # against that real position — no divider/locator machinery involved.
+    fig.canvas.draw()
+    pos = ax.get_position()
+    cax = fig.add_axes([pos.x1 + 0.02, pos.y0, 0.025, pos.height])
+    fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
 
     ax.set_title(title)
     has_extreme_marker = show_extreme and is_extreme_sub is not None and is_extreme_sub.any()
