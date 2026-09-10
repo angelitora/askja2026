@@ -37,6 +37,19 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import cartopy.io.img_tiles as cimgt
 
+# Web Mercator projection for map axes — deliberately cimgt's native
+# `.crs` (cartopy.crs.Mercator under the hood), NOT ccrs.epsg(3857).
+# The two are subtly different: epsg(3857) goes through cartopy's
+# generic external EPSG/PROJ database lookup (`_EPSGProjection`, a much
+# less battle-tested code path with slightly different bounds), while
+# tile classes' `.crs` is cartopy's own native, well-integrated
+# Mercator class — exactly what the IMO/cartopy tile examples use
+# (`projection=IMO_basemap.crs`). The EPSG-based version rendered
+# inconsistently between environments (worked locally, produced a
+# broken map on GitHub Actions' runner) — this native class is the
+# more robust choice. No network call is needed to read `.crs`.
+WEB_MERCATOR_CRS = cimgt.GoogleTiles().crs
+
 
 # ---------------------------------------------------------------------
 # Domain
@@ -93,7 +106,7 @@ class Domain:
 # 1. Fetch & prepare drifter data
 # ---------------------------------------------------------------------
 def fetch_drifter_data(platform_id, days_ago, api_url, auth_user, auth_pass,
-                        smooth_window=5):
+                        smooth_window=3):
     """
     Fetch drifter SST/GPS data from the LDL API and return a DataFrame
     indexed by UTC timestamp, with an added rolling-mean SST column.
@@ -196,8 +209,8 @@ def summarize_latest_temperature(df, window_hours=3, expected_interval_hours=3,
 # plot_timeseries's dark-red highlight AND plot_map's extreme-location
 # markers, so both always agree on what counts as extreme.
 # ---------------------------------------------------------------------
-def compute_extreme_flags(df, smooth_window=5, extreme_smooth_window=10,
-                           extreme_threshold_std=3.0, exclude_first_days=1):
+def compute_extreme_flags(df, smooth_window=3, extreme_smooth_window=5,
+                           extreme_threshold_std=1.0, exclude_first_days=1):
     """
     Identify which rows of `df` have "very high" SST.
 
@@ -240,8 +253,8 @@ def compute_extreme_flags(df, smooth_window=5, extreme_smooth_window=10,
 # ---------------------------------------------------------------------
 # 2. Time series plot: raw+smoothed SST, plus an anomaly panel
 # ---------------------------------------------------------------------
-def plot_timeseries(df, smooth_window=5, extreme_smooth_window=10,
-                     extreme_threshold_std=3.0, exclude_first_days=1,
+def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
+                     extreme_threshold_std=1.0, exclude_first_days=1,
                      title="Drifter surface temperature",
                      save=False, outfile="timeseries.png", dpi=300):
     """
@@ -252,8 +265,8 @@ def plot_timeseries(df, smooth_window=5, extreme_smooth_window=10,
         darker red band for sustained very-high-temperature periods.
 
     The "very high" highlight is computed on a heavier smooth
-    (`extreme_smooth_window`, default 10 points) than the main line
-    (`smooth_window`, default 5), so a single noisy spike doesn't get
+    (`extreme_smooth_window`, default 5 points) than the main line
+    (`smooth_window`, default 3), so a single noisy spike doesn't get
     flagged — only stretches that stay elevated hold up under the
     heavier smoothing. Same definition as `compute_extreme_flags`, which
     `plot_map` also uses so the anomaly panel and the maps agree.
@@ -482,7 +495,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
              show_extreme=True, extreme_color="black",
              extreme_marker="o", extreme_size=80,
              smooth_window=5, extreme_smooth_window=10,
-             extreme_threshold_std=3.0, exclude_first_days=1,
+             extreme_threshold_std=5.0, exclude_first_days=1,
              figsize=(9, 8),
              save=False, outfile="map.png", dpi=300):
     """
@@ -520,7 +533,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
         FULL record (not just the points shown for an n_last map), so
         the baseline/threshold stay consistent across every map.
     extreme_color, extreme_marker, extreme_size :
-        Style of the "very high" marker. Default: solid black 'o'.
+        Style of the "very high" marker. Default: solid black 'X'.
     smooth_window, extreme_smooth_window, extreme_threshold_std,
     exclude_first_days :
         Same meaning as in `plot_timeseries` — keep these matched to
@@ -559,7 +572,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     # figure space (colorbar balloons, map axes collapse to nothing).
     # bbox_inches="tight" at save time handles final spacing instead.
     fig = plt.figure(figsize=figsize)
-    ax = plt.axes(projection=ccrs.epsg(3857))
+    ax = plt.axes(projection=WEB_MERCATOR_CRS)
     # domain.extent is in lon/lat degrees, not Web Mercator metres, so
     # set_extent needs to be told what CRS those numbers are in.
     ax.set_extent(domain.extent, crs=ccrs.PlateCarree())
@@ -573,7 +586,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     # basemap=None/falsy: no background layer added
 
     if show_trajectory:
-        ax.plot(lon, lat, color="dimgray", linewidth=0.5, zorder=2,
+        ax.plot(lon, lat, color="gray", linewidth=0.5, zorder=2,
                 label="drifter track", transform=ccrs.PlateCarree())
 
     sc = ax.scatter(lon, lat, c=sst, cmap=cmap, s=30,
@@ -585,7 +598,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     if show_extreme and is_extreme_sub is not None and is_extreme_sub.any():
         ax.scatter(lon[is_extreme_sub], lat[is_extreme_sub],
                    marker=extreme_marker, s=extreme_size,
-                   color=extreme_color,alpha=0.7,
+                   color=extreme_color, alpha=0.7,
                    zorder=6, transform=ccrs.PlateCarree(),
                    label=f"very high SST (>{extreme_threshold_std:g}\u03c3)")
 
@@ -598,7 +611,7 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     cax = divider.append_axes("right", size="4%", pad=0.3, axes_class=plt.Axes)
     fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
 
-    gl = ax.gridlines(draw_labels=True, linewidth=0.1)
+    gl = ax.gridlines(draw_labels=True, linewidth=0.5)
     gl.top_labels = False
     gl.right_labels = False
 
