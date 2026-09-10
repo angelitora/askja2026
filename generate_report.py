@@ -3,8 +3,8 @@ generate_report.py
 ===================
 
 Builds a static HTML report (docs/index.html + docs/assets/*.png) with
-the latest ASKJA surface drifter temperature summary and plots. Meant to 
-be run periodically (e.g. every 3 hours) by .github/workflows/update_report.yml,
+the latest ASKJA drifter temperature summary and plots. Meant to be run
+periodically (e.g. every 3 hours) by .github/workflows/update_report.yml,
 but works the same run locally:
 
     python generate_report.py
@@ -23,7 +23,7 @@ import drifter_tools as dt
 # Config
 # ---------------------------------------------------------------
 PLATFORM_ID = "300534068744010"
-DAYS_AGO = 9
+DAYS_AGO = 30
 API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 
 # Credentials: prefer environment variables (set as GitHub Actions
@@ -35,8 +35,8 @@ API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
 AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
-SMOOTH_WINDOW = 3
-SST_VMIN, SST_VMAX = 4.5, 6.0
+SMOOTH_WINDOW = 5
+SST_VMIN, SST_VMAX = 4.5, 6.5
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
 OUT_DIR = "docs"
@@ -70,12 +70,13 @@ def main():
 
     domain = dt.Domain.from_points(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.02,
+        buffer_deg=0.03,
     )
     dt.plot_map(
         df, domain, contours=contours,
         title=f"Drifter {PLATFORM_ID} \u2014 overview",
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo",
+        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
     )
 
@@ -87,10 +88,11 @@ def main():
         df, zoom_domain, contours=contours,
         title=f"Drifter {PLATFORM_ID} \u2014 zoom",
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(8, 6),
+        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
 
-    n_last = 5
+    n_last = 15
     last_df = df.iloc[-n_last:]
     last_domain = dt.Domain.from_points(
         last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
@@ -101,6 +103,7 @@ def main():
         title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
         n_last=n_last,
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(7, 6),
+        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
     )
 
@@ -125,7 +128,7 @@ def write_html(summary):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="1800">
-<title>Askja lake surface drifter \u2014 Live Status</title>
+<title>ASKJA Drifter \u2014 Live Status</title>
 <style>
   body {{ font-family: -apple-system, Segoe UI, Roboto, sans-serif; max-width: 900px;
           margin: 2rem auto; padding: 0 1rem; color: #222; }}
@@ -143,9 +146,8 @@ def write_html(summary):
 </style>
 </head>
 <body>
-  <h1>Askja lake surface drifter \u2014 Live Status</h1>
+  <h1>ASKJA Drifter \u2014 Live Status</h1>
   <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
-  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div> 
   {stale_banner}
   <div class="summary">{summary['text']}</div>
 

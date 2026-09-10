@@ -93,7 +93,7 @@ class Domain:
 # 1. Fetch & prepare drifter data
 # ---------------------------------------------------------------------
 def fetch_drifter_data(platform_id, days_ago, api_url, auth_user, auth_pass,
-                        smooth_window=3):
+                        smooth_window=5):
     """
     Fetch drifter SST/GPS data from the LDL API and return a DataFrame
     indexed by UTC timestamp, with an added rolling-mean SST column.
@@ -192,10 +192,56 @@ def summarize_latest_temperature(df, window_hours=3, expected_interval_hours=3,
 
 
 # ---------------------------------------------------------------------
+# Shared "very high temperature" detection — same definition used by
+# plot_timeseries's dark-red highlight AND plot_map's extreme-location
+# markers, so both always agree on what counts as extreme.
+# ---------------------------------------------------------------------
+def compute_extreme_flags(df, smooth_window=5, extreme_smooth_window=10,
+                           extreme_threshold_std=3.0, exclude_first_days=1):
+    """
+    Identify which rows of `df` have "very high" SST.
+
+    Parameters mean the same as in `plot_timeseries` — see there for the
+    full explanation of the smoothing/baseline/threshold logic.
+
+    Returns
+    -------
+    dict with keys:
+        'is_extreme'     : bool Series aligned to df.index
+        'sst_smooth'     : Series, main-window smoothed SST
+        'extreme_smooth' : Series, extreme-window smoothed SST
+        'baseline'       : float, baseline mean SST used
+        'extreme_std'    : float, std of the baseline-period anomaly
+    """
+    sst_smooth = df["SST(degC)"].rolling(window=smooth_window, center=True).mean()
+
+    baseline_start = df.index.min() + pd.Timedelta(days=exclude_first_days)
+    baseline_mask = df.index >= baseline_start
+    if not baseline_mask.any():
+        baseline_mask = np.ones(len(df), dtype=bool)  # exclusion window ate the whole record
+    baseline = df.loc[baseline_mask, "SST(degC)"].mean()
+
+    baseline_anomaly = sst_smooth[baseline_mask] - baseline
+    extreme_std = baseline_anomaly.std()
+
+    extreme_smooth = df["SST(degC)"].rolling(window=extreme_smooth_window, center=True).mean()
+    extreme_anomaly = extreme_smooth - baseline
+    is_extreme = extreme_anomaly > extreme_threshold_std * extreme_std
+
+    return {
+        "is_extreme": is_extreme,
+        "sst_smooth": sst_smooth,
+        "extreme_smooth": extreme_smooth,
+        "baseline": baseline,
+        "extreme_std": extreme_std,
+    }
+
+
+# ---------------------------------------------------------------------
 # 2. Time series plot: raw+smoothed SST, plus an anomaly panel
 # ---------------------------------------------------------------------
-def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
-                     extreme_threshold_std=1.0, exclude_first_days=1,
+def plot_timeseries(df, smooth_window=5, extreme_smooth_window=10,
+                     extreme_threshold_std=3.0, exclude_first_days=1,
                      title="Drifter surface temperature",
                      save=False, outfile="timeseries.png", dpi=300):
     """
@@ -206,10 +252,11 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
         darker red band for sustained very-high-temperature periods.
 
     The "very high" highlight is computed on a heavier smooth
-    (`extreme_smooth_window`, default 5 points) than the main line
-    (`smooth_window`, default 3), so a single noisy spike doesn't get
+    (`extreme_smooth_window`, default 10 points) than the main line
+    (`smooth_window`, default 5), so a single noisy spike doesn't get
     flagged — only stretches that stay elevated hold up under the
-    heavier smoothing.
+    heavier smoothing. Same definition as `compute_extreme_flags`, which
+    `plot_map` also uses so the anomaly panel and the maps agree.
 
     Date-axis ticks use matplotlib's adaptive locator/formatter, so
     spacing and label format adjust automatically whether the record
@@ -239,24 +286,17 @@ def plot_timeseries(df, smooth_window=3, extreme_smooth_window=5,
         water the drifter settles into. Set to 0 to use the whole
         record for the baseline.
     """
+    flags = compute_extreme_flags(
+        df, smooth_window=smooth_window,
+        extreme_smooth_window=extreme_smooth_window,
+        extreme_threshold_std=extreme_threshold_std,
+        exclude_first_days=exclude_first_days,
+    )
     df = df.copy()
-    df["sst_smooth"] = df["SST(degC)"].rolling(window=smooth_window, center=True).mean()
-
-    # Baseline excludes the first `exclude_first_days` (deployment noise)
-    # but every point is still plotted — only the statistics change.
-    baseline_start = df.index.min() + pd.Timedelta(days=exclude_first_days)
-    baseline_df = df[df.index >= baseline_start]
-    if baseline_df.empty:
-        baseline_df = df  # exclusion window ate the whole record; fall back
-    baseline = baseline_df["SST(degC)"].mean()
-
+    df["sst_smooth"] = flags["sst_smooth"]
+    baseline = flags["baseline"]
+    is_extreme = flags["is_extreme"]
     anomaly = df["sst_smooth"] - baseline
-    baseline_anomaly = baseline_df["sst_smooth"] - baseline
-    extreme_std = baseline_anomaly.std()
-
-    extreme_smooth = df["SST(degC)"].rolling(window=extreme_smooth_window, center=True).mean()
-    extreme_anomaly = extreme_smooth - baseline
-    is_extreme = extreme_anomaly > extreme_threshold_std * extreme_std
 
     fig, (ax1, ax2) = plt.subplots(
         2, 1, figsize=(12, 8), sharex=True,
@@ -437,8 +477,12 @@ def add_tile_basemap(ax, domain, source="satellite", zoom=None,
 # ---------------------------------------------------------------------
 def plot_map(df, domain, contours=None, title="Drifter track",
              n_last=None, show_trajectory=True,
-             vmin=4.5, vmax=6.0, cmap="plasma",
+             vmin=4.5, vmax=6.5, cmap="plasma",
              basemap="imo", zoom=None, land_color="0.85",
+             show_extreme=True, extreme_color="black",
+             extreme_marker="o", extreme_size=80,
+             smooth_window=5, extreme_smooth_window=10,
+             extreme_threshold_std=3.0, exclude_first_days=1,
              figsize=(9, 8),
              save=False, outfile="map.png", dpi=300):
     """
@@ -468,11 +512,38 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     zoom : int or None
         Tile zoom level for a tile-based basemap. None = auto, based on
         the domain's extent.
+    show_extreme : bool
+        If True (default), mark locations where SST was "very high" —
+        same definition as `plot_timeseries`'s dark-red highlight, via
+        `compute_extreme_flags` — with a distinct marker, so spatial
+        patterns in extreme readings are visible. Always computed on the
+        FULL record (not just the points shown for an n_last map), so
+        the baseline/threshold stay consistent across every map.
+    extreme_color, extreme_marker, extreme_size :
+        Style of the "very high" marker. Default: solid black 'o'.
+    smooth_window, extreme_smooth_window, extreme_threshold_std,
+    exclude_first_days :
+        Same meaning as in `plot_timeseries` — keep these matched to
+        whatever you used there so the maps and the anomaly panel agree
+        on which points are flagged.
     """
     sub = df.iloc[-n_last:] if n_last else df
     lon = sub["GPS-Longitude(deg)"].values
     lat = sub["GPS-Latitude(deg)"].values
     sst = sub["sst_smooth"].values
+
+    if show_extreme:
+        flags = compute_extreme_flags(
+            df, smooth_window=smooth_window,
+            extreme_smooth_window=extreme_smooth_window,
+            extreme_threshold_std=extreme_threshold_std,
+            exclude_first_days=exclude_first_days,
+        )
+        # Computed on the full df; align down to just the rows in `sub`
+        # (e.g. for an n_last map) via the shared DatetimeIndex.
+        is_extreme_sub = flags["is_extreme"].loc[sub.index].values
+    else:
+        is_extreme_sub = None
 
     # Use Web Mercator for the axes themselves (not PlateCarree). All the
     # XYZ tile sources here (imo, satellite, or a custom URL) are Web
@@ -482,7 +553,12 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     # ~42% as much ground distance as 1\u00b0 of latitude). Web Mercator is
     # locally shape-correct, which is why the IMO/cartopy tile examples
     # use it (`projection=IMO_basemap.crs`) instead of PlateCarree.
-    fig = plt.figure(figsize=figsize, constrained_layout=True)
+    # NOTE: no constrained_layout here — it's documented as incompatible
+    # with mpl_toolkits.axes_grid1 (used below via make_axes_locatable to
+    # size the colorbar correctly). Mixing the two can badly misallocate
+    # figure space (colorbar balloons, map axes collapse to nothing).
+    # bbox_inches="tight" at save time handles final spacing instead.
+    fig = plt.figure(figsize=figsize)
     ax = plt.axes(projection=ccrs.epsg(3857))
     # domain.extent is in lon/lat degrees, not Web Mercator metres, so
     # set_extent needs to be told what CRS those numbers are in.
@@ -497,14 +573,21 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     # basemap=None/falsy: no background layer added
 
     if show_trajectory:
-        ax.plot(lon, lat, color="gray", linewidth=0.5, zorder=2,
+        ax.plot(lon, lat, color="dimgray", linewidth=0.5, zorder=2,
                 label="drifter track", transform=ccrs.PlateCarree())
 
     sc = ax.scatter(lon, lat, c=sst, cmap=cmap, s=30,
-                     vmin=vmin, vmax=vmax, alpha=0.85, zorder=3,
+                     vmin=vmin, vmax=vmax, alpha=0.7, zorder=3,
                      transform=ccrs.PlateCarree())
 
     add_contours(ax, contours)
+
+    if show_extreme and is_extreme_sub is not None and is_extreme_sub.any():
+        ax.scatter(lon[is_extreme_sub], lat[is_extreme_sub],
+                   marker=extreme_marker, s=extreme_size,
+                   color=extreme_color,alpha=0.7,
+                   zorder=6, transform=ccrs.PlateCarree(),
+                   label=f"very high SST (>{extreme_threshold_std:g}\u03c3)")
 
     # mark most recent position
     ax.plot(lon[-1], lat[-1], marker="o", markersize=14,
@@ -515,12 +598,13 @@ def plot_map(df, domain, contours=None, title="Drifter track",
     cax = divider.append_axes("right", size="4%", pad=0.3, axes_class=plt.Axes)
     fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
 
-    gl = ax.gridlines(draw_labels=True, linewidth=0.5)
+    gl = ax.gridlines(draw_labels=True, linewidth=0.1)
     gl.top_labels = False
     gl.right_labels = False
 
     ax.set_title(title)
-    if show_trajectory:
+    has_extreme_marker = show_extreme and is_extreme_sub is not None and is_extreme_sub.any()
+    if show_trajectory or has_extreme_marker:
         ax.legend(loc="lower left", fontsize=8)
 
     if save:
