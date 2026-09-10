@@ -485,6 +485,47 @@ def add_tile_basemap(ax, domain, source="satellite", zoom=None,
 
 
 # ---------------------------------------------------------------------
+# Minimal diagnostic map — no colorbar, no contours, no extreme markers,
+# no gridline labels. Just axes + basemap + plain-colored points. Use
+# this to isolate whether a basic map renders correctly at all, before
+# debugging anything about the colorbar/contours/markers on top of it.
+# ---------------------------------------------------------------------
+def plot_map_simple(df, domain, basemap="imo", zoom=None,
+                     title="Simple map (debug)", point_color="red",
+                     figsize=(9, 8), save=False, outfile="map_simple.png",
+                     dpi=300):
+    """
+    The simplest possible version of plot_map: just the basemap and
+    plain-colored scatter points, nothing else. No colorbar, no
+    contours, no extreme-value markers, no gridline labels.
+    """
+    fig = plt.figure(figsize=figsize)
+    ax = plt.axes(projection=WEB_MERCATOR_CRS)
+    ax.set_extent(domain.extent, crs=ccrs.PlateCarree())
+
+    if basemap == "land":
+        ax.add_feature(cfeature.LAND, facecolor="0.85")
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.8)
+    elif basemap:
+        add_tile_basemap(ax, domain, source=basemap, zoom=zoom)
+
+    lon = df["GPS-Longitude(deg)"].values
+    lat = df["GPS-Latitude(deg)"].values
+    ax.scatter(lon, lat, color=point_color, s=30, zorder=3,
+               transform=ccrs.PlateCarree())
+
+    ax.gridlines(linewidth=0.5)  # no draw_labels, no colorbar, nothing else
+    ax.set_title(title)
+
+    if save:
+        fig.savefig(outfile, dpi=dpi, bbox_inches="tight", facecolor="white")
+        print(f"Saved {outfile}")
+
+    plt.show()
+    return fig
+
+
+# ---------------------------------------------------------------------
 # 4. Maps
 # ---------------------------------------------------------------------
 def plot_map(df, domain, contours=None, title="Drifter track",

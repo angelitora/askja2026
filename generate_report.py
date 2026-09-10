@@ -23,7 +23,7 @@ import drifter_tools as dt
 # Config
 # ---------------------------------------------------------------
 PLATFORM_ID = "300534068744010"
-DAYS_AGO = 30
+DAYS_AGO = 9
 API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 
 # Credentials: prefer environment variables (set as GitHub Actions
@@ -35,8 +35,8 @@ API_URL = "https://ldl.ucsd.edu/cgi-bin/projects/pbe-micro-svp/drifter.py"
 AUTH_USER = os.environ.get("DRIFTER_AUTH_USER") or "pbe-gom"
 AUTH_PASS = os.environ.get("DRIFTER_AUTH_PASS") or "msvp"
 
-SMOOTH_WINDOW = 5
-SST_VMIN, SST_VMAX = 4.5, 6.5
+SMOOTH_WINDOW = 3
+SST_VMIN, SST_VMAX = 4.5, 6.0
 CONTOURS_CSV = "askja_contours.csv"  # optional; skipped if missing
 
 OUT_DIR = "docs"
@@ -70,12 +70,13 @@ def main():
 
     domain = dt.Domain.from_points(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
-        buffer_deg=0.03,
+        buffer_deg=0.02,
     )
     dt.plot_map(
         df, domain, contours=contours,
         title=f"Drifter {PLATFORM_ID} \u2014 overview",
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo",
+        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
     )
 
@@ -87,10 +88,11 @@ def main():
         df, zoom_domain, contours=contours,
         title=f"Drifter {PLATFORM_ID} \u2014 zoom",
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(8, 6),
+        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
     )
 
-    n_last = 15
+    n_last = 5
     last_df = df.iloc[-n_last:]
     last_domain = dt.Domain.from_points(
         last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
@@ -101,7 +103,20 @@ def main():
         title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
         n_last=n_last,
         vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(7, 6),
+        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
+    )
+
+    # Diagnostic: bare-minimum map (basemap + plain points, no colorbar,
+    # no contours, no extreme markers). If the real maps still look wrong
+    # but THIS looks right, the problem is in one of those extra layers,
+    # not the basic axes/basemap/projection setup. Doesn't get linked from
+    # index.html — check it directly at docs/assets/map_simple_debug.png
+    # in the repo file browser.
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title=f"Drifter {PLATFORM_ID} \u2014 DEBUG simple map",
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_simple_debug.png"),
     )
 
     write_html(summary)
@@ -143,9 +158,8 @@ def write_html(summary):
 </style>
 </head>
 <body>
-  <h1>Askja lake surface drifter \u2014 Live Status</h1>
+  <h1>ASKJA Drifter \u2014 Live Status</h1>
   <div class="meta">Report generated {generated_at} \u00b7 refreshes automatically every 3 hours</div>
-  <div class="meta">Participants: Angel Ruiz-Angulo, Mara Navarro-Buigues, Mathis Blache, Alyssa Pilkingon, Steffen Mischke, Denis Legrand, Ragnar Þrastarson</div> 
   {stale_banner}
   <div class="summary">{summary['text']}</div>
 
