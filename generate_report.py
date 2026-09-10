@@ -119,6 +119,32 @@ def main():
         save=True, outfile=os.path.join(ASSETS_DIR, "map_simple_debug.png"),
     )
 
+    # Baseline confirmed working — now test each extra feature ONE at a
+    # time, to pinpoint exactly which one breaks. Compare these four
+    # against the baseline above and against each other.
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG + gridlabels", show_gridlabels=True,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_gridlabels.png"),
+    )
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG + colorbar", color_by_sst=True, show_colorbar=True,
+        vmin=SST_VMIN, vmax=SST_VMAX,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_colorbar.png"),
+    )
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG + contours", contours=contours,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_contours.png"),
+    )
+    dt.plot_map_simple(
+        df, domain, basemap="imo",
+        title="DEBUG + extreme markers", show_extreme=True,
+        smooth_window=SMOOTH_WINDOW,
+        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_extreme.png"),
+    )
+
     write_html(summary)
 
 

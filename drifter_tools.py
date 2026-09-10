@@ -485,19 +485,38 @@ def add_tile_basemap(ax, domain, source="satellite", zoom=None,
 
 
 # ---------------------------------------------------------------------
-# Minimal diagnostic map — no colorbar, no contours, no extreme markers,
-# no gridline labels. Just axes + basemap + plain-colored points. Use
-# this to isolate whether a basic map renders correctly at all, before
-# debugging anything about the colorbar/contours/markers on top of it.
+# Diagnostic map, built up incrementally from the proven-working baseline
+# (basemap + plain points) by toggling individual features on. Use this
+# to isolate exactly which layer breaks rendering, one at a time, rather
+# than guessing — turn on ONE of show_gridlabels/show_colorbar/contours/
+# show_extreme at a time and compare.
 # ---------------------------------------------------------------------
 def plot_map_simple(df, domain, basemap="imo", zoom=None,
                      title="Simple map (debug)", point_color="red",
+                     color_by_sst=False, vmin=4.5, vmax=6.5, cmap="plasma",
+                     show_colorbar=False,
+                     contours=None,
+                     show_extreme=False, smooth_window=5,
+                     extreme_smooth_window=10, extreme_threshold_std=5.0,
+                     exclude_first_days=1, extreme_color="black",
+                     extreme_marker="o", extreme_size=80,
+                     show_gridlabels=False,
                      figsize=(9, 8), save=False, outfile="map_simple.png",
                      dpi=300):
     """
-    The simplest possible version of plot_map: just the basemap and
-    plain-colored scatter points, nothing else. No colorbar, no
-    contours, no extreme-value markers, no gridline labels.
+    Adjustable diagnostic map. Starts from the proven-working baseline
+    (basemap + plain-colored points, no colorbar/contours/markers/grid
+    labels) and lets you switch individual features on:
+
+    show_gridlabels : add draw_labels=True gridlines (vs. plain unlabeled
+                       gridlines in the baseline)
+    color_by_sst + show_colorbar : color points by SST and add the
+                       colorbar (the manually-positioned version)
+    contours        : pass a `load_contours()` result to draw them
+    show_extreme    : mark "very high" SST locations
+
+    Turn on exactly one at a time across separate calls to figure out
+    which one is responsible for a rendering problem.
     """
     fig = plt.figure(figsize=figsize)
     ax = plt.axes(projection=WEB_MERCATOR_CRS)
@@ -511,10 +530,43 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
 
     lon = df["GPS-Longitude(deg)"].values
     lat = df["GPS-Latitude(deg)"].values
-    ax.scatter(lon, lat, color=point_color, s=30, zorder=3,
-               transform=ccrs.PlateCarree())
 
-    ax.gridlines(linewidth=0.5)  # no draw_labels, no colorbar, nothing else
+    if color_by_sst:
+        sst = df["sst_smooth"].values
+        sc = ax.scatter(lon, lat, c=sst, cmap=cmap, vmin=vmin, vmax=vmax,
+                         s=30, zorder=3, transform=ccrs.PlateCarree())
+    else:
+        sc = ax.scatter(lon, lat, color=point_color, s=30, zorder=3,
+                         transform=ccrs.PlateCarree())
+
+    add_contours(ax, contours)
+
+    if show_extreme:
+        flags = compute_extreme_flags(
+            df, smooth_window=smooth_window,
+            extreme_smooth_window=extreme_smooth_window,
+            extreme_threshold_std=extreme_threshold_std,
+            exclude_first_days=exclude_first_days,
+        )
+        is_extreme = flags["is_extreme"].values
+        if is_extreme.any():
+            ax.scatter(lon[is_extreme], lat[is_extreme], marker=extreme_marker,
+                       s=extreme_size, color=extreme_color, zorder=6,
+                       transform=ccrs.PlateCarree())
+
+    if show_gridlabels:
+        gl = ax.gridlines(draw_labels=True, linewidth=0.5)
+        gl.top_labels = False
+        gl.right_labels = False
+    else:
+        ax.gridlines(linewidth=0.5)
+
+    if show_colorbar and color_by_sst:
+        fig.canvas.draw()
+        pos = ax.get_position()
+        cax = fig.add_axes([pos.x1 + 0.02, pos.y0, 0.025, pos.height])
+        fig.colorbar(sc, cax=cax, label="Temperature (\u00b0C)")
+
     ax.set_title(title)
 
     if save:
