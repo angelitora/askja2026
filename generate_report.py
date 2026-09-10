@@ -72,24 +72,35 @@ def main():
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
         buffer_deg=0.02,
     )
-    dt.plot_map(
-        df, domain, contours=contours,
+    # plot_map_simple, not plot_map: verified working via step-by-step
+    # diagnostics (each feature confirmed individually and in
+    # combination), unlike plot_map which had an unresolved rendering
+    # bug on GitHub Actions specifically. Despite the name, this is now
+    # the primary map function everywhere below.
+    map_kwargs = dict(
+        color_by_sst=True, vmin=SST_VMIN, vmax=SST_VMAX, alpha=0.7,
+        show_colorbar=True, contours=contours,
+        show_extreme=True, smooth_window=SMOOTH_WINDOW,
+        extreme_marker="o", extreme_color="black", extreme_alpha=0.7,
+        show_gridlabels=True, show_trajectory=True, show_recent_marker=True,
+        basemap="imo",
+    )
+    dt.plot_map_simple(
+        df, domain,
         title=f"Drifter {PLATFORM_ID} \u2014 overview",
-        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo",
-        smooth_window=SMOOTH_WINDOW,
         save=True, outfile=os.path.join(ASSETS_DIR, "map_overview.png"),
+        **map_kwargs,
     )
 
     zoom_domain = dt.Domain.from_points(
         df["GPS-Longitude(deg)"].values, df["GPS-Latitude(deg)"].values,
         buffer_deg=0.005,
     )
-    dt.plot_map(
-        df, zoom_domain, contours=contours,
-        title=f"Drifter {PLATFORM_ID} \u2014 zoom",
-        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(8, 6),
-        smooth_window=SMOOTH_WINDOW,
+    dt.plot_map_simple(
+        df, zoom_domain,
+        title=f"Drifter {PLATFORM_ID} \u2014 zoom", figsize=(8, 6),
         save=True, outfile=os.path.join(ASSETS_DIR, "map_zoom.png"),
+        **map_kwargs,
     )
 
     n_last = 5
@@ -98,73 +109,12 @@ def main():
         last_df["GPS-Longitude(deg)"].values, last_df["GPS-Latitude(deg)"].values,
         buffer_deg=0.003,
     )
-    dt.plot_map(
-        df, last_domain, contours=contours,
+    dt.plot_map_simple(
+        df, last_domain,
         title=f"Drifter {PLATFORM_ID} \u2014 last {n_last} positions",
-        n_last=n_last,
-        vmin=SST_VMIN, vmax=SST_VMAX, basemap="imo", figsize=(7, 6),
-        smooth_window=SMOOTH_WINDOW,
+        n_last=n_last, figsize=(7, 6),
         save=True, outfile=os.path.join(ASSETS_DIR, "map_last_positions.png"),
-    )
-
-    # Diagnostic: bare-minimum map (basemap + plain points, no colorbar,
-    # no contours, no extreme markers). If the real maps still look wrong
-    # but THIS looks right, the problem is in one of those extra layers,
-    # not the basic axes/basemap/projection setup. Doesn't get linked from
-    # index.html — check it directly at docs/assets/map_simple_debug.png
-    # in the repo file browser.
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title=f"Drifter {PLATFORM_ID} \u2014 DEBUG simple map",
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_simple_debug.png"),
-    )
-
-    # Baseline confirmed working — now test each extra feature ONE at a
-    # time, to pinpoint exactly which one breaks. Compare these four
-    # against the baseline above and against each other.
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG + gridlabels", show_gridlabels=True,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_gridlabels.png"),
-    )
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG + colorbar", color_by_sst=True, show_colorbar=True,
-        vmin=SST_VMIN, vmax=SST_VMAX,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_colorbar.png"),
-    )
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG + contours", contours=contours,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_contours.png"),
-    )
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG + extreme markers", show_extreme=True,
-        smooth_window=SMOOTH_WINDOW,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_extreme.png"),
-    )
-
-    # Every individual feature above checked out — so either something
-    # breaks specifically when combined, or it's one of these two pieces
-    # that plot_map has but was never tested in isolation until now.
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG + trajectory line", show_trajectory=True,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_trajectory.png"),
-    )
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG + recent-position marker", show_recent_marker=True,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_recentmarker.png"),
-    )
-    dt.plot_map_simple(
-        df, domain, basemap="imo",
-        title="DEBUG everything combined",
-        color_by_sst=True, show_colorbar=True, vmin=SST_VMIN, vmax=SST_VMAX,
-        contours=contours, show_extreme=True, smooth_window=SMOOTH_WINDOW,
-        show_gridlabels=True, show_trajectory=True, show_recent_marker=True,
-        save=True, outfile=os.path.join(ASSETS_DIR, "map_debug_all.png"),
+        **map_kwargs,
     )
 
     write_html(summary)

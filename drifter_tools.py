@@ -492,39 +492,49 @@ def add_tile_basemap(ax, domain, source="satellite", zoom=None,
 # show_extreme at a time and compare.
 # ---------------------------------------------------------------------
 def plot_map_simple(df, domain, basemap="imo", zoom=None,
-                     title="Simple map (debug)", point_color="red",
+                     title="Drifter track", point_color="red",
+                     n_last=None,
                      color_by_sst=False, vmin=4.5, vmax=6.5, cmap="plasma",
+                     alpha=0.7,
                      show_colorbar=False,
                      contours=None,
                      show_extreme=False, smooth_window=5,
                      extreme_smooth_window=10, extreme_threshold_std=5.0,
                      exclude_first_days=1, extreme_color="black",
-                     extreme_marker="o", extreme_size=80,
+                     extreme_marker="o", extreme_size=80, extreme_alpha=0.7,
                      show_gridlabels=False,
                      show_trajectory=False, show_recent_marker=False,
                      figsize=(9, 8), save=False, outfile="map_simple.png",
                      dpi=300):
     """
-    Adjustable diagnostic map. Starts from the proven-working baseline
-    (basemap + plain-colored points, no colorbar/contours/markers/grid
-    labels) and lets you switch individual features on:
+    Map built from individually-verified pieces, each toggled on
+    explicitly. Originally a diagnostic tool (hence the name) for
+    isolating a rendering bug in the fancier `plot_map` — every feature
+    here was confirmed working in isolation and in combination, so this
+    is now the primary/recommended map function; `plot_map` is kept in
+    this file but unused, in favor of this more robustly-tested path.
 
+    n_last          : if set, only the last n_last rows are plotted
+                       (e.g. "most recent positions" map). Extreme flags
+                       are still computed on the FULL df first, so the
+                       baseline/threshold stay consistent with the other
+                       maps — only which points are drawn changes.
     show_gridlabels : add draw_labels=True gridlines (vs. plain unlabeled
                        gridlines in the baseline)
     color_by_sst + show_colorbar : color points by SST and add the
-                       colorbar (the manually-positioned version)
+                       colorbar (plain ax= colorbar — see comment at the
+                       call site for why not a pixel-matched one)
     contours        : pass a `load_contours()` result to draw them
     show_extreme    : mark "very high" SST locations
-    show_trajectory : draw the connecting track line + legend (present in
-                       plot_map, absent from the earlier debug images)
+    show_trajectory : draw the connecting track line + legend
     show_recent_marker : draw the open-circle "most recent position"
-                       marker (also present in plot_map, also untested
-                       in isolation until now)
-
-    Turn on exactly one at a time (or all at once) across separate calls
-    to figure out which one — or which combination — is responsible for
-    a rendering problem.
+                       marker
+    alpha, extreme_alpha : transparency of the main points / extreme
+                       markers respectively.
     """
+    full_df = df
+    sub = df.iloc[-n_last:] if n_last else df
+
     fig = plt.figure(figsize=figsize)
     ax = plt.axes(projection=WEB_MERCATOR_CRS)
     ax.set_extent(domain.extent, crs=ccrs.PlateCarree())
@@ -535,35 +545,35 @@ def plot_map_simple(df, domain, basemap="imo", zoom=None,
     elif basemap:
         add_tile_basemap(ax, domain, source=basemap, zoom=zoom)
 
-    lon = df["GPS-Longitude(deg)"].values
-    lat = df["GPS-Latitude(deg)"].values
+    lon = sub["GPS-Longitude(deg)"].values
+    lat = sub["GPS-Latitude(deg)"].values
 
     if show_trajectory:
         ax.plot(lon, lat, color="gray", linewidth=0.5, zorder=2,
                 label="drifter track", transform=ccrs.PlateCarree())
 
     if color_by_sst:
-        sst = df["sst_smooth"].values
+        sst = sub["sst_smooth"].values
         sc = ax.scatter(lon, lat, c=sst, cmap=cmap, vmin=vmin, vmax=vmax,
-                         s=30, zorder=3, transform=ccrs.PlateCarree())
+                         s=30, alpha=alpha, zorder=3, transform=ccrs.PlateCarree())
     else:
-        sc = ax.scatter(lon, lat, color=point_color, s=30, zorder=3,
-                         transform=ccrs.PlateCarree())
+        sc = ax.scatter(lon, lat, color=point_color, s=30, alpha=alpha,
+                         zorder=3, transform=ccrs.PlateCarree())
 
     add_contours(ax, contours)
 
     if show_extreme:
         flags = compute_extreme_flags(
-            df, smooth_window=smooth_window,
+            full_df, smooth_window=smooth_window,
             extreme_smooth_window=extreme_smooth_window,
             extreme_threshold_std=extreme_threshold_std,
             exclude_first_days=exclude_first_days,
         )
-        is_extreme = flags["is_extreme"].values
-        if is_extreme.any():
-            ax.scatter(lon[is_extreme], lat[is_extreme], marker=extreme_marker,
-                       s=extreme_size, color=extreme_color, zorder=6,
-                       transform=ccrs.PlateCarree())
+        is_extreme_sub = flags["is_extreme"].loc[sub.index].values
+        if is_extreme_sub.any():
+            ax.scatter(lon[is_extreme_sub], lat[is_extreme_sub], marker=extreme_marker,
+                       s=extreme_size, color=extreme_color, alpha=extreme_alpha,
+                       zorder=6, transform=ccrs.PlateCarree())
 
     if show_recent_marker:
         ax.plot(lon[-1], lat[-1], marker="o", markersize=14,
